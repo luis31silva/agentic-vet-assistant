@@ -1,30 +1,76 @@
 import os
 from typing import Any, Dict, List
 from app.providers.base import ModelProvider
-import httpx
+from loguru import logger
 
-GEMINI_API_URL = os.getenv("GEMINI_API_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-
 class GeminiAdapter(ModelProvider):
-    def __init__(self, api_key: str | None = None, base_url: str | None = None):
+    """Adapter que utiliza o novo SDK oficial google-genai para o Gemini."""
+
+    def __init__(self, api_key: str | None = None, default_model: str | None = "gemini-2.5-flash"):
         self.api_key = api_key or GEMINI_API_KEY
-        self.base_url = base_url or GEMINI_API_URL
+        self.default_model = default_model or "gemini-2.5-flash"
 
-    async def chat(self, messages: List[Dict[str, Any]], model: str = "gemini") -> Dict[str, Any]:
-        """
-        Minimal Gemini adapter stub. It expects a HTTP endpoint at GEMINI_API_URL
-        that accepts POST {messages, model} and returns a JSON similar to OpenAI.
+        if not self.api_key:
+            raise RuntimeError("GEMINI_API_KEY não configurada no GeminiAdapter")
 
-        If no GEMINI_API_URL is configured, raise an error to avoid silent failures.
-        """
-        if not self.base_url:
-            raise RuntimeError("GEMINI_API_URL not configured for GeminiAdapter")
+        try:
+            from google import genai
+            from google.genai import types
+            self.types = types
+            self.client = genai.Client(api_key=self.api_key)
+        except ImportError as exc:
+            raise RuntimeError(
+                "SDK google-genai não disponível. Instale com: pip install google-genai"
+            ) from exc
 
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-        payload = {"model": model, "messages": messages}
-        async with httpx.AsyncClient() as client:
-            r = await client.post(self.base_url, json=payload, headers=headers, timeout=30)
-            r.raise_for_status()
-            return r.json()
+    async def chat(self, messages: List[Dict[str, Any]], model: str | None = None) -> Dict[str, Any]:
+        model_name = model or self.default_model
+
+        formatted_contents = []
+        system_instruction = (
+            "Tu és um assistente de uma clínica veterinária em Portugal. "
+            "Sê cordial, profissional e eficiente. "
+            "Se a mensagem do utilizador for apenas uma saudação (ex: 'Bom dia', 'Olá'), "
+            "responde de forma amigável e pergunta como podes ajudar com o animal de estimação. "
+            "Para outras questões, tenta identificar a intenção (ex: marcação de consulta, urgência, dúvida de medicação). "
+            "Responde sempre em português de Portugal."
+        )
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content_text = msg.get("content", "")
+
+            if role == "system":
+                system_instruction = content_text
+            else:
+                gemini_role = "model" if role == "assistant" else "user"
+                formatted_contents.append(
+                    self.types.Content(
+                        role=gemini_role,
+                        parts=[self.types.Part.from_text(text=content_text)]
+                    )
+                )
+
+        kwargs = {
+            "model": model_name,
+            "contents": formatted_contents,
+            "config": self.types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json"
+            )
+        }
+
+        try:
+            response = await self.client.aio.models.generate_content(**kwargs)
+            text = response.text
+        except Exception as e:
+            logger.error(f"Erro na API do Gemini: {str(e)}")
+            return {
+                "choices": [{"message": {"role": "assistant", "content": '{"error": "Erro no serviço"}'}}]
+            }
+
+        return {
+            "choices": [{"message": {"role": "assistant", "content": text}}]
+        }

@@ -10,6 +10,7 @@ VALID_INTENTS = [
     "ADD_VACCINES",
     "UPDATE_PATIENT",
     "CANCEL_ACTION",
+    "CHAT",
 ]
 
 
@@ -20,9 +21,15 @@ class IntentService:
     async def classify(self, message: str, images: List[str], conversation) -> IntentResult:
         # Build a short prompt asking the model to pick one of VALID_INTENTS and extract entities
         system = (
-            "You are an assistant that maps user messages to one of the allowed intents and extracts entities. "
-            "Allowed intents: " + ",".join(VALID_INTENTS) + ". Respond in JSON with keys: intent, confidence, entities. "
-            "Do not invent endpoints or perform CRUD."
+            "You are a professional veterinary assistant. "
+            "Your task is to classify user input into one of these intents: " + ",".join(VALID_INTENTS) + ". "
+            "Use 'CHAT' if the user is greeting, asking clinical questions, seeking veterinary advice, or talking about anything related to veterinary care. "
+            "Respond in JSON with these keys: "
+            "1. 'intent': The classification. "
+            "2. 'confidence': A float between 0 and 1. "
+            "3. 'entities': A dictionary of extracted entities. "
+            "4. 'response': A human-readable text response (mandatory if intent is CHAT, optional otherwise). "
+            "Always respond in Portuguese (Portugal)."
         )
         user = f"Message: {message}\nImages: {images}\nConversation history: {conversation.history if conversation else '[]'}"
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -37,7 +44,7 @@ class IntentService:
             j = json.loads(content)
             intent = j.get("intent") or j.get("action")
             if intent and intent.upper() in VALID_INTENTS:
-                return IntentResult(intent=intent.upper(), confidence=float(j.get("confidence", 1.0)), entities=j.get("entities", {}))
+                return IntentResult(intent=intent.upper(), confidence=float(j.get("confidence", 1.0)), entities=j.get("entities", {}), response=j.get("response", ""))
             else:
                 # fallback simple rules
                 text = message.lower()

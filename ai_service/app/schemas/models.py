@@ -28,6 +28,7 @@ class IntentResult(BaseModel):
     intent: str
     confidence: float = 0.0
     entities: Dict[str, Any] = Field(default_factory=dict)
+    response: Optional[str] = None
 
 
 class CreateOwnerRequest(BaseModel):
