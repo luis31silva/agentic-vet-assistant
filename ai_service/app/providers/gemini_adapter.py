@@ -1,4 +1,5 @@
 import os
+import base64
 from typing import Any, Dict, List
 from app.providers.base import ModelProvider
 from loguru import logger
@@ -29,37 +30,70 @@ class GeminiAdapter(ModelProvider):
         model_name = model or self.default_model
 
         formatted_contents = []
-        system_instruction = (
-            "Tu és um assistente de uma clínica veterinária em Portugal. "
-            "Sê cordial, profissional e eficiente. "
-            "Se a mensagem do utilizador for apenas uma saudação (ex: 'Bom dia', 'Olá'), "
-            "responde de forma amigável e pergunta como podes ajudar com o animal de estimação. "
-            "Para outras questões, tenta identificar a intenção (ex: marcação de consulta, urgência, dúvida de medicação). "
-            "Responde sempre em português de Portugal."
-        )
+        system_instruction = "" 
 
         for msg in messages:
             role = msg.get("role", "user")
             content_text = msg.get("content", "")
+            images = msg.get("images", [])
 
             if role == "system":
                 system_instruction = content_text
             else:
                 gemini_role = "model" if role == "assistant" else "user"
+                parts = []
+
+                if content_text:
+                    parts.append(self.types.Part.from_text(text=content_text))
+
+                # Processar imagens Base64 com lógica robusta
+                for img_b64 in images:
+                    try:
+                        # 1. Identificar o tipo MIME e limpar o prefixo
+                        mime_type = "image/jpeg" # Predefinição segura
+                        clean_b64 = img_b64
+                        
+                        if img_b64.startswith("data:"):
+                            # Formato: data:image/png;base64,iVBORw0KGgo...
+                            # Separa no header e no corpo
+                            header, clean_b64 = img_b64.split(",", 1)
+                            # Extrai o mime type do header (ex: data:image/png;base64 -> image/png)
+                            mime_type = header.split(":")[1].split(";")[0]
+                        
+                        # 2. Descodificar a string limpa para bytes puros
+                        # Adicionamos 'validate=True' para garantir que é um base64 válido
+                        img_bytes = base64.b64decode(clean_b64, validate=True)
+                        
+                        # 3. Adicionar a part multimédia
+                        parts.append(
+                            self.types.Part.from_bytes(
+                                data=img_bytes,
+                                mime_type=mime_type
+                            )
+                        )
+                        logger.info(f"Imagem processada com sucesso: {mime_type} ({len(img_bytes)} bytes)")
+                        
+                    except Exception as e:
+                        logger.error(f"Falha ao processar imagem Base64. A imagem será ignorada. Erro: {e}")
+
+                if not parts:
+                    parts.append(self.types.Part.from_text(text=""))
+
                 formatted_contents.append(
                     self.types.Content(
                         role=gemini_role,
-                        parts=[self.types.Part.from_text(text=content_text)]
+                        parts=parts
                     )
                 )
+
+        config_kwargs = {"response_mime_type": "application/json"}
+        if system_instruction:
+            config_kwargs["system_instruction"] = system_instruction
 
         kwargs = {
             "model": model_name,
             "contents": formatted_contents,
-            "config": self.types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json"
-            )
+            "config": self.types.GenerateContentConfig(**config_kwargs)
         }
 
         try:

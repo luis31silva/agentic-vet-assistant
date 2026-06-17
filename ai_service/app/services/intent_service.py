@@ -23,7 +23,8 @@ class IntentService:
         system = (
             "You are a professional veterinary assistant. "
             "Your task is to classify user input into one of these intents: " + ",".join(VALID_INTENTS) + ". "
-            "Use 'CHAT' if the user is greeting, asking clinical questions, seeking veterinary advice, or talking about anything related to veterinary care. "
+            "Use 'CHAT' if the user is greeting, asking clinical questions, seeking veterinary advice, or talking about anything related to veterinary care."
+            "If you receive images, analyze them and include any relevant information in your classification. If the intent is per example 'ADD_VACCINES', extract the vaccine names and dates from the images if possible."
             "Respond in JSON with these keys: "
             "1. 'intent': The classification. "
             "2. 'confidence': A float between 0 and 1. "
@@ -31,8 +32,11 @@ class IntentService:
             "4. 'response': A human-readable text response (mandatory if intent is CHAT, optional otherwise). "
             "Always respond in Portuguese (Portugal)."
         )
-        user = f"Message: {message}\nImages: {images}\nConversation history: {conversation.history if conversation else '[]'}"
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        user_content = f"Message: {message}\nConversation history: {conversation.history if conversation else '[]'}"
+        messages = [
+            {"role": "system", "content": system}, 
+            {"role": "user", "content": user_content, "images": images}
+        ]
         resp = await self.model.chat(messages)
         choices = resp.get("choices", [])
         if not choices:
