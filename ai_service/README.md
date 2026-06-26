@@ -1,109 +1,181 @@
-AI Orchestrator microservice (FastAPI)
+# AI Veterinary Assistant
 
-Description
- - Lightweight stateless microservice that performs NLP, intent detection, entity extraction,
-	 OCR orchestration and workflow orchestration for the clinicavet system.
+Microserviço FastAPI que funciona como assistente de IA para uma clínica veterinária. Orquestra NLP, classificação de intents, extração de entidades, processamento de imagens, e conselhos clínicos contextuais.
 
-Run (development)
+## Arquitetura
 
-1. create a virtualenv and install deps:
+```
+┌─────────────────────────────────────────────────────────┐
+│  Routers (endpoints)                                     │
+│  ├── POST /chat           → fluxo conversacional         │
+│  ├── POST /clinical-advice → conselhos clínicos          │
+│  ├── POST /confirm-action  → confirmar/cancelar ações    │
+│  └── POST /process-documents → OCR de imagens            │
+├─────────────────────────────────────────────────────────┤
+│  Middleware                                              │
+│  ├── APIKeyMiddleware     → autenticação                 │
+│  └── InputValidationMiddleware → limites de input        │
+├─────────────────────────────────────────────────────────┤
+│  Services                                                │
+│  ├── IntentService        → classificação de intent      │
+│  └── ClinicalAdvisor      → recomendações clínicas       │
+├─────────────────────────────────────────────────────────┤
+│  Agents                                                  │
+│  ├── Orchestrator         → decisão de fluxo central     │
+│  └── WorkflowEngine       → execução de ações confirmadas│
+├─────────────────────────────────────────────────────────┤
+│  Tools (9 disponíveis)                                   │
+│  ├── CreateOwnerTool                                     │
+│  ├── CreatePatientTool                                   │
+│  ├── CreateOwnerAndPatientTool (composto)                │
+│  ├── AddVaccinesTool                                     │
+│  ├── SearchPatientTool                                   │
+│  ├── SearchOwnerTool                                     │
+│  ├── GetPatientHistoryTool                               │
+│  ├── GetAppointmentsTool                                 │
+│  └── GetOwnerPatientsTool                                │
+├─────────────────────────────────────────────────────────┤
+│  Providers (abstração de LLM)                            │
+│  ├── OpenAIAdapter        → GPT-4o-mini                  │
+│  └── GeminiAdapter        → Gemini 2.5 Flash             │
+├─────────────────────────────────────────────────────────┤
+│  Utils                                                   │
+│  ├── PHPApiClient         → HTTP client para backend PHP │
+│  └── ImageProcessor       → compressão de imagens        │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Instalação
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+# Editar .env com as configurações
 ```
 
-2. run locally:
+## Execução
 
 ```bash
-uvicorn app.main:app --reload --port 9000
+# Desenvolvimento (auto-reload)
+uvicorn app.main:app --reload --host 127.0.0.1 --port 9000
+
+# Produção
+uvicorn app.main:app --host 127.0.0.1 --port 9000 --workers 2
 ```
 
-Configuration (env vars)
+## Configuração (.env)
 
-- `PHP_API_URL` — base URL for the PHP backend (default: `http://localhost:8000/api`)
-- `OPENAI_API_KEY` — OpenAI API key (if using OpenAI)
-- `OCR_API_URL` — optional OCR provider endpoint that accepts `{image_url}` and returns `{text}`
-- `LLM_PROVIDER` — choose model provider: `openai` (default) or `gemini`
-- `GEMINI_API_URL` — (optional) HTTP endpoint for Gemini adapter
-- `GEMINI_API_KEY` — (optional) API key for Gemini adapter
-- `LOG_LEVEL` — logging level (INFO by default)
+| Variável | Descrição | Default |
+|----------|-----------|---------|
+| `LLM_PROVIDER` | Provider de LLM: `openai` ou `gemini` | `openai` |
+| `OPENAI_API_KEY` | API key da OpenAI | — |
+| `GEMINI_API_KEY` | API key do Gemini | — |
+| `PHP_API_URL` | URL base da API PHP | `http://localhost:8000/api` |
+| `AI_SERVICE_KEY` | Chave partilhada para autenticação | — (sem auth em dev) |
+| `ALLOWED_ORIGINS` | Origens CORS (separadas por vírgula) | `*` |
+| `BIND_HOST` | Host para bind do uvicorn | `127.0.0.1` |
+| `BIND_PORT` | Porta | `9000` |
+| `LOG_LEVEL` | Nível de logging | `INFO` |
 
-Provider selection
+## Endpoints
 
-The service uses a provider factory (`app/providers/factory.py`) that returns a `ModelProvider`.
-Set `LLM_PROVIDER=openai` or `LLM_PROVIDER=gemini` to select the adapter.
+### POST /chat
 
- - `openai` uses the built-in `OpenAIProvider` (HTTP call to OpenAI API).
- - `gemini` uses `GeminiAdapter`, which expects a configured `GEMINI_API_URL` that accepts
-	 `{model,messages}` and returns a JSON response compatible with the rest of the code.
+Endpoint principal — fluxo conversacional completo.
 
-Do not let the service call the database directly — it calls the PHP backend via `PHPApiClient`.
+```json
+// Request
+{
+  "conversation": {
+    "conversation_id": "uuid",
+    "history": [],
+    "pending_action": null
+  },
+  "message": "Bom dia",
+  "images": []
+}
 
-API Endpoints (examples)
-
-1) Classify intent and extract entities — `POST /chat`
-
-```bash
-curl -X POST http://localhost:9000/chat/ \
-	-H 'Content-Type: application/json' \
-	-d '{
-		"conversation": { "conversation_id": "conv1", "history": [], "pending_action": null },
-		"message": "Adiciona um novo paciente chamado Rex, cão da raça Labrador",
-		"images": []
-	}'
+// Response
+{
+  "status": "ok",
+  "response": "Bom dia! Em que posso ajudar?",
+  "intent": "CHAT",
+  "pending_action": null,
+  "data": null
+}
 ```
 
-Successful JSON contains `intent` and `entities`.
+### POST /clinical-advice
 
-2) Process documents/images via OCR — `POST /process-documents`
+Conselhos clínicos contextuais (chamado por botão dedicado).
 
-```bash
-curl -X POST http://localhost:9000/process-documents/ \
-	-H 'Content-Type: application/json' \
-	-d '{ "images": ["https://example.com/photo1.jpg"] }'
+```json
+// Request
+{
+  "patient_id": 1,
+  "symptoms": "Vómitos frequentes há 3 dias, perda de apetite"
+}
+
+// Response
+{
+  "status": "ok",
+  "advice": "Com base nos dados do paciente..."
+}
 ```
 
-3) Confirm or continue a pending action — `POST /confirm-action`
+### POST /confirm-action
 
-```bash
-curl -X POST http://localhost:9000/confirm-action/ \
-	-H 'Content-Type: application/json' \
-	-d '{
-		"conversation": { "conversation_id": "conv1", "history": [], "pending_action": {"action_id":"a1","tool":"CREATE_PATIENT","payload":{"name":"Rex"},"workflow_state":"WAITING_CONFIRMATION"}},
-		"message": "Sim, confirma"
-	}'
+Confirmar/cancelar ação pendente.
+
+```json
+// Request
+{
+  "conversation": {
+    "conversation_id": "uuid",
+    "history": [],
+    "pending_action": { "tool": "CREATE_OWNER", "payload": {...}, "workflow_state": "WAITING_CONFIRMATION" }
+  },
+  "message": "Sim"
+}
 ```
 
-How to switch to Gemini
+## Intents suportados
 
-1. Provide a Gemini endpoint and key in env:
+| Intent | Descrição |
+|--------|-----------|
+| `CHAT` | Conversa geral, saudações, perguntas veterinárias |
+| `CREATE_OWNER_AND_PATIENT` | Criar tutor + animal (composto) |
+| `CREATE_OWNER` | Criar só tutor |
+| `CREATE_PATIENT` | Criar só animal |
+| `ADD_VACCINES` | Registar vacinas |
+| `SEARCH_PATIENT` | Pesquisar animal |
+| `SEARCH_OWNER` | Pesquisar tutor |
+| `GET_PATIENT_HISTORY` | Histórico clínico |
+| `GET_APPOINTMENTS` | Consultas de um animal |
+| `GET_OWNER_PATIENTS` | Animais de um tutor |
+| `CLINICAL_ADVICE` | Conselhos clínicos |
+| `CANCEL_ACTION` | Cancelar ação pendente |
 
-```bash
-export LLM_PROVIDER=gemini
-export GEMINI_API_URL=https://your-gemini-proxy.local/endpoint
-export GEMINI_API_KEY=your_key_here
-```
+## Segurança
 
-2. Restart the service. The factory will return `GeminiAdapter` and the rest of the code
-	 will continue to call `ModelProvider.chat(...)` without knowing the provider details.
+- **API Key**: Todas as rotas (exceto `/`) requerem header `X-API-Key`
+- **Network binding**: Configurar `BIND_HOST=127.0.0.1` para não expor externamente
+- **CORS**: Configurar `ALLOWED_ORIGINS` com domínios específicos em produção
+- **Input limits**: Mensagens limitadas a 5000 chars, máximo 5 imagens por request
+- **Sem delete**: O AI service nunca executa operações de eliminação
 
-Notes and best practices
+## Contrato com o PHP Backend
 
-- The microservice is stateless: all state must be provided by the PHP backend in the `conversation` payload.
-- The microservice never writes to the DB — it only orchestrates and returns structured payloads.
-- The model prompts are controlled and limited to the allowed intent set; tools are whitelisted.
-- Avoid exposing arbitrary provider endpoints — the Gemini adapter expects a safe proxy that
-	exposes a constrained HTTP contract.
+- O AI service é **stateless** — todo o estado vem no campo `conversation`
+- O PHP é responsável por persistir `conversation_id`, `history`, e `pending_action`
+- Imagens no `history` só devem aparecer no turn em que foram enviadas
+- O PHP deve passar o JWT no header `Authorization: Bearer <token>` para que o AI service autentique chamadas à PHP API
+- O AI service nunca acede à base de dados diretamente
 
-Development tips
+## Extensibilidade
 
-- Use `LOG_LEVEL=DEBUG` locally for more verbose logs.
-- Provide a mock `GEMINI_API_URL` during development that returns a simple OpenAI-like JSON to test the adapter.
-
-Support/Extensibility
-
-- To add a new model provider: implement `app/providers/base.ModelProvider` and register it in
-	`app/providers/factory.py`.
-- To add new tools, create classes under `app/tools/` implementing the `BaseTool` interface.
+- **Novo provider**: Implementar `app/providers/base.ModelProvider` e registar em `factory.py`
+- **Novo tool**: Criar classe em `app/tools/` implementando `BaseTool` e registar em `registry.py`
+- **Novo intent**: Adicionar a `VALID_INTENTS` em `intent_service.py` e tratar no `Orchestrator`
