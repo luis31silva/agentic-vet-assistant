@@ -8,7 +8,7 @@ from dotenv import load_dotenv, find_dotenv
 
 from app.middleware.auth import APIKeyMiddleware
 from app.middleware.input_validation import InputValidationMiddleware
-from app.routers import chat, process_documents, confirm_action, clinical_advice
+from app.routers import chat, confirm_action, clinical_advice
 
 # Load .env before anything else
 caminho_env = find_dotenv()
@@ -73,6 +73,3 @@ app.include_router(clinical_advice.router, prefix="/clinical-advice", tags=["Cli
 
 # Confirm/cancel pending actions
 app.include_router(confirm_action.router, prefix="/confirm-action", tags=["Actions"])
-
-# OCR document processing (legacy)
-app.include_router(process_documents.router, prefix="/process-documents", tags=["Documents"])
