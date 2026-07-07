@@ -15,6 +15,7 @@ from app.schemas.models import (
     WorkflowState,
 )
 from app.utils.php_api_client import PHPApiClient, PHPApiError
+from app.utils.normalizer import normalize_entities
 
 
 # Maps intent → required fields for that action
@@ -368,7 +369,10 @@ class Orchestrator:
     # ===========================
 
     def _build_payload(self, intent: str, entities: Dict[str, Any]) -> Dict[str, Any]:
-        """Build a structured payload from entities based on intent."""
+        """Build a structured payload from entities based on intent.
+
+        Normalizes species/breed values using local fuzzy matching.
+        """
         if intent == "CREATE_OWNER_AND_PATIENT":
             owner_data = entities.get("owner", {})
             patient_data = entities.get("patient", {})
@@ -385,18 +389,22 @@ class Orchestrator:
                     if k in ("name", "species", "breed", "weight", "birth_date", "microchip")
                 }
 
-            return {"owner": owner_data, "patient": patient_data}
+            payload = {"owner": owner_data, "patient": patient_data}
 
         elif intent == "CREATE_OWNER":
-            return {k: v for k, v in entities.items() if v is not None}
+            payload = {k: v for k, v in entities.items() if v is not None}
 
         elif intent == "CREATE_PATIENT":
-            return {k: v for k, v in entities.items() if v is not None}
+            payload = {k: v for k, v in entities.items() if v is not None}
 
         elif intent == "ADD_VACCINES":
-            return {k: v for k, v in entities.items() if v is not None}
+            payload = {k: v for k, v in entities.items() if v is not None}
 
-        return entities
+        else:
+            payload = entities
+
+        # Normalize species/breed using local fuzzy matching (zero tokens)
+        return normalize_entities(payload)
 
     def _find_missing_fields(self, intent: str, payload: Dict[str, Any]) -> List[str]:
         """Check which required fields are missing from the payload."""
