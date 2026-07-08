@@ -1,33 +1,15 @@
-from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
 # ===========================
-# WORKFLOW STATE
+# CONVERSATION STATE (simplified - no pending_action)
 # ===========================
-
-
-class WorkflowState(str, Enum):
-    WAITING_CONFIRMATION = "WAITING_CONFIRMATION"
-    MISSING_REQUIRED_FIELDS = "MISSING_REQUIRED_FIELDS"
-    READY_TO_EXECUTE = "READY_TO_EXECUTE"
-    CANCELLED = "CANCELLED"
-    COMPLETED = "COMPLETED"
-
-
-class PendingAction(BaseModel):
-    action_id: Optional[str] = None
-    tool: Optional[str] = None
-    payload: Optional[Dict[str, Any]] = None
-    workflow_state: Optional[WorkflowState] = None
-    missing_fields: List[str] = Field(default_factory=list)
 
 
 class ConversationState(BaseModel):
     conversation_id: str
     history: List[Dict[str, Any]] = Field(default_factory=list)
-    pending_action: Optional[PendingAction] = None
 
 
 # ===========================
@@ -82,7 +64,6 @@ class CreatePatientRequest(BaseModel):
 
 # ===========================
 # PATIENT WITHOUT OWNER (for composite creation)
-# Owner will be injected after owner creation
 # ===========================
 
 
@@ -102,7 +83,6 @@ class PatientData(BaseModel):
 
 # ===========================
 # COMPOSITE: OWNER + PATIENT
-# For creating both in one flow.
 # ===========================
 
 
@@ -116,7 +96,7 @@ class CreateOwnerAndPatientRequest(BaseModel):
 
 
 # ===========================
-# VACCINES / APPOINTMENTS
+# VACCINES
 # ===========================
 
 
@@ -156,14 +136,13 @@ class SearchQuery(BaseModel):
 
 
 # ===========================
-# ORCHESTRATOR RESPONSE (unified response format)
+# ORCHESTRATOR RESPONSE (for search/get intents only)
 # ===========================
 
 
 class OrchestratorResponse(BaseModel):
-    """Unified response from the AI orchestrator to the PHP backend."""
+    """Response from orchestrator for query intents."""
     status: str = "ok"
     response: str = Field(description="Human-readable text response for the user")
     intent: Optional[str] = None
-    pending_action: Optional[PendingAction] = None
     data: Optional[Any] = None

@@ -8,7 +8,7 @@ from dotenv import load_dotenv, find_dotenv
 
 from app.middleware.auth import APIKeyMiddleware
 from app.middleware.input_validation import InputValidationMiddleware
-from app.routers import chat, confirm_action, clinical_advice
+from app.routers import chat, clinical_advice
 
 # Load .env before anything else
 caminho_env = find_dotenv()
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Veterinary Assistant",
     description="AI orchestrator for veterinary clinic management",
-    version="2.0.0",
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -62,14 +62,11 @@ app.add_middleware(APIKeyMiddleware)
 @app.get("/")
 async def root():
     """Health check endpoint."""
-    return {"status": "ok", "service": "ai-veterinary-assistant", "version": "2.0.0"}
+    return {"status": "ok", "service": "ai-veterinary-assistant", "version": "2.1.0"}
 
 
-# Main chat endpoint (handles full conversational flow)
+# Main chat endpoint — classifies intent, extracts entities, returns data
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 
-# Dedicated clinical advice endpoint (called from appointment button)
+# Clinical advice endpoint — called from dedicated button during appointments
 app.include_router(clinical_advice.router, prefix="/clinical-advice", tags=["Clinical"])
-
-# Confirm/cancel pending actions
-app.include_router(confirm_action.router, prefix="/confirm-action", tags=["Actions"])
