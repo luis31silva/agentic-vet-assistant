@@ -13,18 +13,22 @@ from loguru import logger
 from app.utils.breeds import ALL_BREEDS, CAT_BREEDS, DOG_BREEDS, SPECIES_TITLES
 
 
-# Common aliases that difflib might miss
+# Maps any species variation to the DB value (dog/cat)
 SPECIES_ALIASES = {
-    "dog": "Cão",
-    "cao": "Cão",
-    "cão": "Cão",
-    "canino": "Cão",
-    "canina": "Cão",
-    "cat": "Gato",
-    "gata": "Gato",
-    "gato": "Gato",
-    "felino": "Gato",
-    "felina": "Gato",
+    "dog": "dog",
+    "cao": "dog",
+    "cão": "dog",
+    "canino": "dog",
+    "canina": "dog",
+    "cachorro": "dog",
+    "cadela": "dog",
+    "cat": "cat",
+    "gata": "cat",
+    "gato": "cat",
+    "felino": "cat",
+    "felina": "cat",
+    "gatinha": "cat",
+    "gatinho": "cat",
 }
 
 BREED_ALIASES = {
@@ -82,7 +86,7 @@ BREED_ALIASES = {
 
 
 def normalize_species(species_input: Optional[str]) -> Optional[str]:
-    """Normalize a species string to the canonical value ('Cão' or 'Gato').
+    """Normalize a species string to the DB value ('dog' or 'cat').
 
     Returns the original value if no match is found.
     """
@@ -94,11 +98,6 @@ def normalize_species(species_input: Optional[str]) -> Optional[str]:
     # Check direct aliases
     if lower in SPECIES_ALIASES:
         return SPECIES_ALIASES[lower]
-
-    # Try fuzzy match against canonical titles
-    match = get_close_matches(species_input, SPECIES_TITLES, n=1, cutoff=0.6)
-    if match:
-        return match[0]
 
     return species_input
 

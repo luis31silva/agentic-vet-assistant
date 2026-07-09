@@ -7,6 +7,7 @@ from loguru import logger
 from app.schemas.models import ConversationState, OrchestratorResponse
 from app.services.intent_service import IntentService
 from app.agents.orchestrator import Orchestrator
+from app.utils.normalizer import normalize_entities
 
 router = APIRouter()
 intent_service = IntentService()
@@ -72,13 +73,15 @@ async def chat(req: ChatRequest, request: Request):
             }
 
         # For all other intents (CHAT, CREATE_*, ADD_VACCINES, etc.)
-        # Just return the classification + entities — frontend handles the UI
+        # Normalize species/breed before returning to frontend
+        entities = normalize_entities(dict(intent_result.entities))
+
         return {
             "status": "ok",
             "response": intent_result.response or "",
             "intent": intent_result.intent,
             "confidence": intent_result.confidence,
-            "entities": intent_result.entities,
+            "entities": entities,
             "data": None,
         }
 
