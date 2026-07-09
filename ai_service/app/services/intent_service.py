@@ -115,20 +115,9 @@ class IntentService:
                     history_lines.append(f"{role}: {content}")
             history_summary = "\n".join(history_lines)
 
-        # Include pending action context if exists
-        pending_context = ""
-        if conversation and conversation.pending_action:
-            pa = conversation.pending_action
-            pending_context = (
-                f"\n[CONTEXTO: Existe uma ação pendente - Tool: {pa.tool}, "
-                f"Estado: {pa.workflow_state}, Campos em falta: {pa.missing_fields}]"
-            )
-
         user_content = f"Mensagem: {message}"
         if history_summary:
             user_content += f"\n\nHistórico recente:\n{history_summary}"
-        if pending_context:
-            user_content += pending_context
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
