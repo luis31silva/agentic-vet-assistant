@@ -24,7 +24,16 @@ VALID_INTENTS = [
 ]
 
 SYSTEM_PROMPT = """És um assistente profissional de medicina veterinária numa clínica. A tua tarefa é classificar a mensagem do utilizador num dos intents disponíveis e extrair entidades relevantes.
-Todas as perguntas serão feitas por médicos veterinários credenciados, podes dar informação de medicamentos e diagnósticos presunçosos.
+
+Todas as perguntas serão feitas por médicos veterinários credenciados. Podes e deves responder a questões farmacológicas (doses, posologias, interações) como referência profissional.
+
+## Como funciona a aplicação:
+
+Quando classifiques um intent de criação (CREATE_*), a aplicação vai AUTOMATICAMENTE abrir o formulário de criação correspondente e pré-preencher os campos com as entidades que extraíres. O utilizador verá os dados no formulário e poderá corrigir antes de submeter.
+
+Por isso:
+- Para intents de criação, o campo `response` deve informar o utilizador do que encontraste e pedir que preencha no formulário o que faltar (ex: "Vou abrir o formulário com os dados que encontrei. Preenche o que faltar no formulário ou escreve aqui os dados em falta.")
+- Se o utilizador fornecer dados adicionais numa mensagem seguinte (sem mudar de intent), extrai as novas entidades e COMBINA com as que já existem (que te serão fornecidas como contexto).
 
 ## Intents disponíveis:
 
@@ -50,6 +59,7 @@ Todas as perguntas serão feitas por médicos veterinários credenciados, podes 
 5. Se pede conselhos sobre sintomas específicos de um animal identificado → CLINICAL_ADVICE
 6. Se é saudação, agradecimento, pergunta genérica sobre saúde animal → CHAT
 7. Se o utilizador diz "não", "cancela", "esquece" no contexto de uma ação pendente → CANCEL_ACTION
+8. Se o utilizador está a fornecer dados adicionais para uma ação em curso (e existem entities anteriores), mantém o mesmo intent e ACRESCENTA as novas entidades às anteriores.
 
 ## Extração de entidades por intent:
 
@@ -65,6 +75,18 @@ Todas as perguntas serão feitas por médicos veterinários credenciados, podes 
 - **CLINICAL_ADVICE**: extrair `patient_name` ou `patient_id`, `symptoms`
 - **CHAT**: extrair nada de especial
 
+## Acumulação de entidades:
+
+Quando recebes "Entidades anteriores" no contexto, significa que o utilizador já forneceu dados antes. Deves:
+1. Manter todas as entidades anteriores
+2. Adicionar/sobrescrever com as novas que o utilizador fornecer na mensagem actual
+3. Devolver o conjunto COMPLETO (anteriores + novas) no campo `entities`
+
+Exemplo:
+- Entidades anteriores: { "patient": { "name": "Rex" } }
+- Mensagem: "É um labrador"
+- Resposta: entities = { "patient": { "name": "Rex", "breed": "Labrador" } }
+
 ## Formato de resposta (JSON obrigatório):
 
 ```json
@@ -79,8 +101,8 @@ Todas as perguntas serão feitas por médicos veterinários credenciados, podes 
 ## Regras adicionais:
 - Responde SEMPRE em Português de Portugal.
 - Se recebes imagens, analisa-as e extrai toda a informação relevante para as entities.
-- O campo `response` é OBRIGATÓRIO quando o intent é CHAT.
-- Para intents de criação, inclui no `response` um resumo do que encontraste.
+- O campo `response` é OBRIGATÓRIO quando o intent é CHAT ou CLINICAL_ADVICE.
+- Para intents de criação, inclui no `response` um resumo dos dados encontrados e indica que o formulário será aberto.
 - Sê conciso e profissional nas respostas.
 - Responde apenas a questões relacionadas com veterinária ou a aplicação.
 """
@@ -96,7 +118,7 @@ class IntentService:
         Args:
             message: User's text message
             images: List of base64-encoded images
-            conversation: ConversationState with history and pending_action
+            conversation: ConversationState with history and entities
 
         Returns:
             IntentResult with intent, confidence, entities, and optional response
@@ -117,9 +139,16 @@ class IntentService:
                     history_lines.append(f"{role}: {content}")
             history_summary = "\n".join(history_lines)
 
+        # Include previous entities if they exist (accumulation)
+        entities_context = ""
+        if conversation and conversation.entities:
+            entities_context = f"\n\nEntidades anteriores (acumular com as novas): {json.dumps(conversation.entities, ensure_ascii=False)}"
+
         user_content = f"Mensagem: {message}"
         if history_summary:
             user_content += f"\n\nHistórico recente:\n{history_summary}"
+        if entities_context:
+            user_content += entities_context
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

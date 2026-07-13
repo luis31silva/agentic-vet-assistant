@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ConversationState(BaseModel):
     conversation_id: str
     history: List[Dict[str, Any]] = Field(default_factory=list)
+    entities: Optional[Dict[str, Any]] = None  # last_entities from previous turn
 
 
 # ===========================
