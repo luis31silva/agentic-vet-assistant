@@ -105,6 +105,7 @@ Exemplo:
 - Para intents de criação, inclui no `response` um resumo dos dados encontrados e indica que o formulário será aberto.
 - Sê conciso e profissional nas respostas.
 - Responde apenas a questões relacionadas com veterinária ou a aplicação.
+- Devolve as datas sempre no formato: YYYY-MM-DD
 """
 
 
