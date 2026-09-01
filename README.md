@@ -4,6 +4,10 @@
 
 > A veterinary professional types or uploads an image. The assistant understands the intent, extracts relevant data, and pre-fills the appropriate form — or answers clinical questions with context-aware recommendations.
 
+> **Solo full-stack project.** This repository is the AI microservice. It integrates with a complete veterinary clinic management system (PHP/Laravel backend + Vue.js frontend), also built entirely by me. The system is currently in production at Clínica Veterinária Barcelinhos and was designed to be multi-tenant — ready for other clinics to adopt.
+
+![Application Overview](ai_service/docs/screenshots/frontpage.png)
+
 ---
 
 ## The Problem
@@ -103,8 +107,6 @@ AI Response:
 → Vet reviews, corrects if needed, clicks "Create"
 ```
 
-<!-- ![Intent Classification & Form Pre-fill](docs/screenshots/intent_prefill.png) -->
-
 ---
 
 ### Image Analysis
@@ -174,8 +176,6 @@ Input: "Maine Cooon"   → Output: "Maine Coon" (typo corrected)
 Input: "cão"          → Output: "dog" (DB-ready value)
 ```
 
-<!-- ![Breed Normalization](docs/screenshots/breed_normalization.png) -->
-
 Supports 300+ dog breeds and 50+ cat breeds with alias mapping and fuzzy matching.
 
 ---
@@ -201,8 +201,6 @@ AI Response:
 → Buttons: [Sim, abre o formulário] [Não]
 ```
 
-<!-- ![Confidence Confirmation](docs/screenshots/confidence_confirmation.png) -->
-
 This prevents accidental navigation while maintaining a fast, fluid experience when the AI is confident.
 
 ---
@@ -224,7 +222,13 @@ The frontend sends page context with each message. If the vet is viewing a patie
 → Returns the answer without asking "which patient?"
 ```
 
-<!-- ![Contextual Awareness](docs/screenshots/contextual_awareness.png) -->
+---
+
+### Home Visits with Map View
+
+The management system includes a Google Maps integration for scheduled home visits (domiciles). Each visit is geolocated, giving the vet a clear visual overview of the day's route and helping plan the most efficient path between appointments.
+
+![Home Visits Map](ai_service/docs/screenshots/domiciles.png)
 
 ---
 
@@ -245,8 +249,6 @@ Turn 3: "Born March 2020"
         → entities: { patient: { patientName: "Rex", breed: "Labrador Retriever", birthDate: "2020-03" } }
         → Birth date field updates
 ```
-
-<!-- ![Entity Accumulation](docs/screenshots/entity_accumulation.png) -->
 
 Each turn accumulates entities. The form updates in real-time as more data becomes available.
 
@@ -276,6 +278,25 @@ Each turn accumulates entities. The form updates in real-time as more data becom
 
 ---
 
+## Key Design Decisions
+
+**Stateless AI service, state owned by the backend**
+The AI service holds no session state — the PHP backend persists conversation history and passes it in each request. This keeps the service horizontally scalable and lets the backend remain the single source of truth for auditing and permissions.
+
+**Local breed normalization instead of prompting the LLM**
+The list of 300+ breeds is never sent to the LLM. Instead, the model extracts free text and a local fuzzy-matching engine (`difflib` + alias map) maps it to canonical values. This avoids ~4-5k wasted tokens on every request while still correcting typos and variations.
+
+**AI classifies, the UI executes**
+Rather than confirming actions in the chat ("type yes to create"), the assistant only classifies intent and extracts data. The frontend opens the existing, validated forms pre-filled with that data. The user keeps full control, sees familiar UI, and no data is created without an explicit click — reducing risk and complexity.
+
+**Provider abstraction over vendor lock-in**
+LLM access sits behind a `ModelProvider` interface. Switching between Gemini and OpenAI is a one-line environment change, and adding a new provider means implementing a single class — no changes to the rest of the codebase.
+
+**Confidence-driven interaction**
+Every classification carries a confidence score. Low-confidence intents ask the user for confirmation before acting, preventing accidental navigation while keeping the flow fast when the model is certain.
+
+---
+
 ## Security
 
 - **API Key authentication** between services (shared secret)
@@ -288,6 +309,12 @@ Each turn accumulates entities. The form updates in real-time as more data becom
 
 ## Project Structure
 
+This repository contains the **AI microservice**. It is one of three components of the full system:
+
+- **AI service** (this repo) — Python/FastAPI microservice for intent classification, entity extraction, and clinical support
+- **Management backend** — PHP/Laravel REST API (patients, owners, appointments, inventory, invoices, etc.)
+- **Frontend** — Vue.js single-page application
+
 ```
 agentic-vet-assistant/
 ├── ai_service/                    # AI microservice (Python/FastAPI)
@@ -295,27 +322,34 @@ agentic-vet-assistant/
 │   │   ├── agents/               # Orchestrator (query routing)
 │   │   ├── middleware/           # Auth, input validation
 │   │   ├── providers/           # LLM adapters (Gemini, OpenAI)
-│   │   ├── routers/            # HTTP endpoints (/chat, /clinical-advice)
-│   │   ├── schemas/            # Pydantic models
-│   │   ├── services/           # Intent classification, clinical advisor
-│   │   └── utils/              # PHP API client, image processor, normalizer
-│   ├── docs/                   # Integration documentation
+│   │   ├── routers/             # HTTP endpoints (/chat, /clinical-advice)
+│   │   ├── schemas/             # Pydantic models
+│   │   ├── services/            # Intent classification, clinical advisor
+│   │   └── utils/               # PHP API client, image processor, normalizer
+│   ├── docs/                    # Integration specs (PHP + frontend)
+│   ├── README.md                # Setup & run instructions
 │   ├── requirements.txt
 │   └── .env.example
 └── README.md
 ```
 
+See [`ai_service/README.md`](ai_service/README.md) for setup and run instructions, and [`ai_service/docs/`](ai_service/docs/) for backend and frontend integration specs.
+
+---
+
 ## Author
 
-Built as a full-stack AI integration project demonstrating:
+Designed and built entirely by me — the AI microservice, the PHP/Laravel management backend, and the Vue.js frontend. A solo full-stack project running in production at a real veterinary clinic.
+
+Demonstrates:
+- Full-stack ownership — AI service, backend API, and frontend
 - Microservice architecture with AI orchestration
 - Multi-modal LLM integration (text + image)
-- Real-world domain knowledge (veterinary medicine)
-- Production patterns (auth, error handling, token optimization)
-- Clean separation of concerns between AI, backend, and frontend
+- Real-world domain modelling (veterinary medicine)
+- Production patterns — authentication, error handling, token optimization, multi-tenant design
 
 ---
 
 ## License
 
-Private project — Clínica Veterinária Barcelinhos.
+Private project — currently in production at Clínica Veterinária Barcelinhos. Built to be multi-tenant.
