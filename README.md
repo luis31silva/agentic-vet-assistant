@@ -127,7 +127,7 @@ AI extracts:
 → Form opens with all extracted fields pre-filled from the image
 ```
 
-[Image Analysis](docs/screenshots/image_analysis.png)
+![Image Analysis](docs/screenshots/image_analysis.png)
 
 ---
 
@@ -153,7 +153,7 @@ Response:
 ⚠️ AI-generated suggestions. Final diagnosis is the veterinarian's responsibility.
 ```
 
-[Clinical Decision Support](docs/screenshots/clinical_advice.png)
+![Clinical Decision Support](docs/screenshots/clinical_advice.png)
 
 The clinical advisor considers:
 - Species, breed, age, weight
